@@ -1,0 +1,28 @@
+{
+  "name": "libswitch",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/libswitch.d.js",
+      "default": "./dist/libswitch.js"
+    }
+  },
+  "bin": {
+    "libswitch": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "Lukas Manuel Graf",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "find-up": "^7.0.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.7"
+  }
+}
