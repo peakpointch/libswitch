@@ -13,17 +13,22 @@ export class Libswitch {
         this.remote = config?.remote || pkgConfig.remote || '';
         this.tsconfigDev = config?.tsconfigDev || pkgConfig.tsconfigDev || '';
         this.tsconfigProd = config?.tsconfigProd || pkgConfig.tsconfigProd || '';
+        if (path.basename(this.tsconfigDev) === 'tsconfig.json' ||
+            path.basename(this.tsconfigProd) === 'tsconfig.json') {
+            throw new Error(`You cannot set the dev or prod tsconfig to "tsconfig.json" because it will be overwritten during switching. Use a ".dev.json" or ".prod.json" file instead.`);
+        }
         this.tsconfigDev = path.isAbsolute(this.tsconfigDev)
             ? this.tsconfigDev
             : path.resolve(this.root, this.tsconfigDev);
         this.tsconfigProd = path.isAbsolute(this.tsconfigProd)
             ? this.tsconfigProd
             : path.resolve(this.root, this.tsconfigProd);
+        this.state = this.isLocal() ? 'dev' : 'prod';
         this.validateConfig();
     }
     validateConfig() {
         for (const [key, value] of Object.entries(this)) {
-            if (['pkg', 'root'].includes(key))
+            if (['pkg', 'root', 'state'].includes(key))
                 continue;
             if (!value) {
                 throw new Error(`Missing libswitch config key: ${key}`);
@@ -39,6 +44,17 @@ export class Libswitch {
     }
     getTsconfigFile() {
         return this.isLocal() ? this.tsconfigDev : this.tsconfigProd;
+    }
+    setTsconfig(file) {
+        let src = file;
+        if (!file) {
+            src = this.getTsconfigFile();
+        }
+        else if (!path.isAbsolute(src)) {
+            src = path.resolve(this.root, file);
+        }
+        const dest = path.resolve(this.root, 'tsconfig.json');
+        fs.copyFileSync(src, dest);
     }
     async useLocalLib() {
         if (this.isLocal()) {
@@ -58,10 +74,13 @@ export class Libswitch {
                 resolve();
             });
         });
+        this.state = 'dev';
+        this.setTsconfig(this.tsconfigDev);
     }
     async useRemoteLib() {
         if (!this.isLocal()) {
             console.log('✅ Already using remote lib.');
+            console.log('🔄️ Updating remote lib...');
         }
         else {
             console.log('🔄️ Switching to remote lib...');
@@ -78,6 +97,8 @@ export class Libswitch {
                 resolve();
             });
         });
+        this.state = 'prod';
+        this.setTsconfig(this.tsconfigProd);
     }
 }
 export const libswitch = new Libswitch();

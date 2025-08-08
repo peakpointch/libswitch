@@ -3,6 +3,7 @@ import { Libswitch } from './libswitch.js';
 
 const lib = new Libswitch();
 const cmd = process.argv[2];
+const option = process.argv[3];
 
 switch (cmd) {
   case 'local':

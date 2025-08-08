@@ -3,6 +3,8 @@ import { findUpSync } from 'find-up';
 import path from 'path';
 import fs from 'fs';
 
+export type LibswitchState = 'dev' | 'prod';
+
 export interface LibswitchConfig {
   name: string;
   local: string;
@@ -19,6 +21,7 @@ export class Libswitch implements LibswitchConfig {
   remote: string;
   tsconfigDev: string;
   tsconfigProd: string;
+  state: LibswitchState;
 
   constructor(config?: Partial<LibswitchConfig>) {
     this.root = path.dirname(findUpSync('package.json')!);
@@ -32,6 +35,15 @@ export class Libswitch implements LibswitchConfig {
     this.tsconfigDev = config?.tsconfigDev || pkgConfig.tsconfigDev || '';
     this.tsconfigProd = config?.tsconfigProd || pkgConfig.tsconfigProd || '';
 
+    if (
+      path.basename(this.tsconfigDev) === 'tsconfig.json' ||
+      path.basename(this.tsconfigProd) === 'tsconfig.json'
+    ) {
+      throw new Error(
+        `You cannot set the dev or prod tsconfig to "tsconfig.json" because it will be overwritten during switching. Use a ".dev.json" or ".prod.json" file instead.`
+      );
+    }
+
     this.tsconfigDev = path.isAbsolute(this.tsconfigDev)
       ? this.tsconfigDev
       : path.resolve(this.root, this.tsconfigDev);
@@ -40,12 +52,14 @@ export class Libswitch implements LibswitchConfig {
       ? this.tsconfigProd
       : path.resolve(this.root, this.tsconfigProd);
 
+    this.state = this.isLocal() ? 'dev' : 'prod';
+
     this.validateConfig();
   }
 
   private validateConfig() {
     for (const [key, value] of Object.entries(this)) {
-      if (['pkg', 'root'].includes(key)) continue;
+      if (['pkg', 'root', 'state'].includes(key)) continue;
       if (!value) {
         throw new Error(`Missing libswitch config key: ${key}`);
       }
@@ -65,6 +79,19 @@ export class Libswitch implements LibswitchConfig {
     return this.isLocal() ? this.tsconfigDev : this.tsconfigProd;
   }
 
+  setTsconfig(file?: string): void {
+    let src: string = file as string;
+    if (!file) {
+      src = this.getTsconfigFile();
+    } else if (!path.isAbsolute(src)) {
+      src = path.resolve(this.root, file);
+    }
+
+    const dest = path.resolve(this.root, 'tsconfig.json');
+
+    fs.copyFileSync(src, dest);
+  }
+
   async useLocalLib(): Promise<void> {
     if (this.isLocal()) {
       console.log('✅ Already using local lib.');
@@ -81,12 +108,16 @@ export class Libswitch implements LibswitchConfig {
         if (stderr) console.error(stderr);
         resolve();
       });
-    })
+    });
+
+    this.state = 'dev';
+    this.setTsconfig(this.tsconfigDev);
   }
 
   async useRemoteLib(): Promise<void> {
     if (!this.isLocal()) {
       console.log('✅ Already using remote lib.');
+      console.log('🔄️ Updating remote lib...');
     } else {
       console.log('🔄️ Switching to remote lib...');
     }
@@ -100,7 +131,10 @@ export class Libswitch implements LibswitchConfig {
         if (stderr) console.error(stderr);
         resolve();
       });
-    })
+    });
+
+    this.state = 'prod';
+    this.setTsconfig(this.tsconfigProd);
   }
 }
 

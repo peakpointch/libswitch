@@ -1,3 +1,4 @@
+export type LibswitchState = 'dev' | 'prod';
 export interface LibswitchConfig {
     name: string;
     local: string;
@@ -13,11 +14,13 @@ export declare class Libswitch implements LibswitchConfig {
     remote: string;
     tsconfigDev: string;
     tsconfigProd: string;
+    state: LibswitchState;
     constructor(config?: Partial<LibswitchConfig>);
     private validateConfig;
     isLocal(): boolean;
     isRemote(): boolean;
     getTsconfigFile(): string;
+    setTsconfig(file?: string): void;
     useLocalLib(): Promise<void>;
     useRemoteLib(): Promise<void>;
 }
