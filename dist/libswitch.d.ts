@@ -1,28 +1,18 @@
-export type LibswitchState = 'dev' | 'prod';
-export interface LibswitchConfig {
+export interface LibConfig {
     name: string;
     local: string;
     remote: string;
     tsconfigDev: string;
     tsconfigProd: string;
 }
-export declare class Libswitch implements LibswitchConfig {
-    pkg: any;
-    root: string;
-    name: string;
-    local: string;
-    remote: string;
-    tsconfigDev: string;
-    tsconfigProd: string;
-    state: LibswitchState;
-    constructor(config?: Partial<LibswitchConfig>);
+export declare class Libswitch {
+    private root;
+    private pkg;
+    private libs;
+    constructor();
     private validateConfig;
-    isLocal(): boolean;
-    isRemote(): boolean;
-    getTsconfigFile(): string;
-    setTsconfig(file?: string): void;
-    useLocalLib(): Promise<void>;
-    useRemoteLib(): Promise<void>;
+    isLocal(libName: string): boolean;
+    getAllLibNames(): string[];
+    private setTsconfig;
+    switchLib(libName: string, to: "local" | "remote"): Promise<void>;
 }
-export declare const libswitch: Libswitch;
-export default libswitch;
