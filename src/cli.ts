@@ -72,4 +72,32 @@ program
     process.exit(0);
   });
 
+program
+  .command("update")
+  .description(
+    "Refresh the current version of the libraries (keeps current local/remote state)",
+  )
+  .argument("[names...]", "Optional list of library names to update")
+  .action(async (names: string[]) => {
+    const targets = names.length > 0 ? names : lib.getAllLibNames();
+
+    if (targets.length === 0) {
+      console.log("No libraries to update.");
+      return;
+    }
+
+    for (const name of targets) {
+      try {
+        await lib.updateLib(name);
+        console.log(`✅ ${name} updated successfully.`);
+      } catch (e) {
+        console.error(
+          `❌ Failed to update ${name}:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+    process.exit(0);
+  });
+
 program.parse();

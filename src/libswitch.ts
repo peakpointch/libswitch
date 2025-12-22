@@ -99,4 +99,30 @@ export class Libswitch {
     );
     this.setTsconfig(lib);
   }
+
+  async updateLib(libName: string): Promise<void> {
+    const lib = this.libs.get(libName);
+    if (!lib) throw new Error(`Library "${libName}" not found in config.`);
+
+    const currentlyLocal = this.isLocal(libName);
+    const mode = currentlyLocal ? "local" : "remote";
+    const target = currentlyLocal ? lib.local : lib.remote;
+
+    console.log(`🔄 Updating ${libName} in ${mode} mode (${target})...`);
+
+    await new Promise<void>((resolve, reject) => {
+      exec(`npm install ${target}`, (error) => {
+        if (error) return reject(error);
+        resolve();
+      });
+    });
+
+    // Refresh internal pkg state
+    this.pkg = JSON.parse(
+      fs.readFileSync(path.join(this.root, "package.json"), "utf-8"),
+    );
+
+    // Ensure tsconfig is still synced correctly
+    this.setTsconfig(lib);
+  }
 }

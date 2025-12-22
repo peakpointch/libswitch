@@ -15,4 +15,5 @@ export declare class Libswitch {
     getAllLibNames(): string[];
     private setTsconfig;
     switchLib(libName: string, to: "local" | "remote"): Promise<void>;
+    updateLib(libName: string): Promise<void>;
 }
