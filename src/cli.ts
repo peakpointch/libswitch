@@ -16,37 +16,22 @@ program
   .argument("[names...]", "Optional list of library names")
   .action((names: string[]) => {
     const targets = names.length > 0 ? names : lib.getAllLibNames();
-
-    if (targets.length === 0) {
-      console.log("No libraries configured in libswitch.");
-      return;
-    }
-
     targets.forEach((name) => {
-      try {
-        const mode = lib.isLocal(name) ? "dev (local)" : "prod (remote)";
-        console.log(`${name.padEnd(20)} : ${mode}`);
-      } catch (e) {
-        console.error(`${name.padEnd(20)} : ❌ Not found in config`);
-      }
+      const mode = lib.isLocal(name) ? "dev (local)" : "prod (remote)";
+      console.log(`${name.padEnd(20)} : ${mode}`);
     });
   });
 
 // LOCAL: Names are required <names...>
 program
   .command("local")
-  .description("Switch specific libs to local development")
-  .argument("<names...>", "List of library names to switch to local")
+  .argument("<names...>", "Libraries to switch to local")
   .action(async (names: string[]) => {
     for (const name of names) {
       try {
         await lib.switchLib(name, "local");
-        console.log(`✅ ${name} is now local.`);
       } catch (e) {
-        console.error(
-          `❌ Failed to switch ${name}:`,
-          e instanceof Error ? e.message : e,
-        );
+        console.error(`❌ ${name}:`, e);
       }
     }
     process.exit(0);
@@ -55,18 +40,13 @@ program
 // REMOTE: Names are required <names...>
 program
   .command("remote")
-  .description("Switch specific libs to remote package")
-  .argument("<names...>", "List of library names to switch to remote")
+  .argument("<names...>", "Libraries to switch to remote")
   .action(async (names: string[]) => {
     for (const name of names) {
       try {
         await lib.switchLib(name, "remote");
-        console.log(`✅ ${name} is now remote.`);
       } catch (e) {
-        console.error(
-          `❌ Failed to switch ${name}:`,
-          e instanceof Error ? e.message : e,
-        );
+        console.error(`❌ ${name}:`, e);
       }
     }
     process.exit(0);
@@ -74,29 +54,23 @@ program
 
 program
   .command("update")
-  .description(
-    "Refresh the current version of the libraries (keeps current local/remote state)",
-  )
-  .argument("[names...]", "Optional list of library names to update")
+  .argument("<names...>", "Libraries to refresh")
   .action(async (names: string[]) => {
-    const targets = names.length > 0 ? names : lib.getAllLibNames();
-
-    if (targets.length === 0) {
-      console.log("No libraries to update.");
-      return;
-    }
-
-    for (const name of targets) {
+    for (const name of names) {
       try {
         await lib.updateLib(name);
-        console.log(`✅ ${name} updated successfully.`);
       } catch (e) {
-        console.error(
-          `❌ Failed to update ${name}:`,
-          e instanceof Error ? e.message : e,
-        );
+        console.error(`❌ ${name}:`, e);
       }
     }
+    process.exit(0);
+  });
+
+program
+  .command("sync")
+  .description("Force sync tsconfig paths with current package.json state")
+  .action(() => {
+    lib.syncTsconfig();
     process.exit(0);
   });
 

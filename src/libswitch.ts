@@ -7,8 +7,7 @@ export interface LibConfig {
   name: string;
   local: string;
   remote: string;
-  tsconfigDev: string;
-  tsconfigProd: string;
+  alias?: string; // e.g., "src/index.ts"
 }
 
 export class Libswitch {
@@ -21,7 +20,7 @@ export class Libswitch {
     if (!pkgPath) throw new Error("Could not find package.json");
 
     this.root = path.dirname(pkgPath);
-    this.pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    this.refreshPkg();
 
     const configs: LibConfig[] = Array.isArray(this.pkg.libswitch)
       ? this.pkg.libswitch
@@ -31,23 +30,19 @@ export class Libswitch {
 
     configs.forEach((cfg) => {
       this.validateConfig(cfg);
-      this.libs.set(cfg.name, {
-        ...cfg,
-        tsconfigDev: path.resolve(this.root, cfg.tsconfigDev),
-        tsconfigProd: path.resolve(this.root, cfg.tsconfigProd),
-      });
+      this.libs.set(cfg.name, cfg);
     });
   }
 
+  private refreshPkg() {
+    this.pkg = JSON.parse(
+      fs.readFileSync(path.join(this.root, "package.json"), "utf-8"),
+    );
+  }
+
   private validateConfig(cfg: LibConfig) {
-    const keys: (keyof LibConfig)[] = [
-      "name",
-      "local",
-      "remote",
-      "tsconfigDev",
-      "tsconfigProd",
-    ];
-    for (const key of keys) {
+    const required: (keyof LibConfig)[] = ["name", "local", "remote"];
+    for (const key of required) {
       if (!cfg[key])
         throw new Error(
           `Library ${cfg.name || "unknown"} missing config: ${key}`,
@@ -55,7 +50,7 @@ export class Libswitch {
     }
   }
 
-  isLocal(libName: string): boolean {
+  public isLocal(libName: string): boolean {
     const libPath =
       this.pkg.dependencies?.[libName] ||
       this.pkg.devDependencies?.[libName] ||
@@ -63,20 +58,62 @@ export class Libswitch {
     return libPath.startsWith("file:");
   }
 
-  getAllLibNames(): string[] {
+  public getAllLibNames(): string[] {
     return Array.from(this.libs.keys());
   }
 
-  private setTsconfig(lib: LibConfig): void {
-    const isLocal = this.isLocal(lib.name);
-    const src = isLocal ? lib.tsconfigDev : lib.tsconfigProd;
-    const dest = path.resolve(this.root, "tsconfig.json");
+  /**
+   * Programmatically edits tsconfig.json to inject or remove path aliases
+   */
+  public syncTsconfig(): void {
+    const tsconfigPath = path.resolve(this.root, "tsconfig.json");
+    if (!fs.existsSync(tsconfigPath)) return;
 
-    // Note: If multiple libs use different tsconfigs, the last one processed wins.
-    // Usually, dev-mode for any lib means we want the dev-tsconfig globally.
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, dest);
+    let tsconfig: any;
+    try {
+      tsconfig = JSON.parse(fs.readFileSync(tsconfigPath, "utf-8"));
+    } catch (e) {
+      console.error("❌ Failed to parse tsconfig.json");
+      return;
     }
+
+    tsconfig.compilerOptions = tsconfig.compilerOptions || {};
+    tsconfig.compilerOptions.paths = tsconfig.compilerOptions.paths || {};
+
+    this.libs.forEach((lib) => {
+      if (!lib.alias) return;
+
+      const aliasMain = lib.name;
+      const aliasWildcard = `${lib.name}/*`;
+
+      if (this.isLocal(lib.name)) {
+        // Strip "file:" and resolve path relative to project root
+        const basePath = lib.local.replace("file:", "");
+        const srcPath = lib.alias || "src/index.ts";
+        const wildcardPath = srcPath.replace(
+          /index\.(ts|js)$|main\.(ts|js)$/,
+          "*",
+        );
+
+        // Add mappings
+        tsconfig.compilerOptions.paths[aliasMain] = [`${basePath}${srcPath}`];
+        tsconfig.compilerOptions.paths[aliasWildcard] = [
+          `${basePath}${wildcardPath}`,
+        ];
+      } else {
+        // Cleanup mappings
+        delete tsconfig.compilerOptions.paths[aliasMain];
+        delete tsconfig.compilerOptions.paths[aliasWildcard];
+      }
+    });
+
+    // Cleanup paths object if empty
+    if (Object.keys(tsconfig.compilerOptions.paths).length === 0) {
+      delete tsconfig.compilerOptions.paths;
+    }
+
+    fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2));
+    console.log("🔧 tsconfig.json paths synchronized.");
   }
 
   async switchLib(libName: string, to: "local" | "remote"): Promise<void> {
@@ -87,28 +124,24 @@ export class Libswitch {
     console.log(`🔄️ Switching ${libName} to ${to} (${target})...`);
 
     await new Promise<void>((resolve, reject) => {
-      exec(`npm install ${target}`, (error, stdout, stderr) => {
+      exec(`npm install ${target}`, (error) => {
         if (error) return reject(error);
         resolve();
       });
     });
 
-    // Reload package.json to reflect changes in isLocal()
-    this.pkg = JSON.parse(
-      fs.readFileSync(path.join(this.root, "package.json"), "utf-8"),
-    );
-    this.setTsconfig(lib);
+    this.refreshPkg();
+    this.syncTsconfig();
   }
 
   async updateLib(libName: string): Promise<void> {
     const lib = this.libs.get(libName);
     if (!lib) throw new Error(`Library "${libName}" not found in config.`);
 
-    const currentlyLocal = this.isLocal(libName);
-    const mode = currentlyLocal ? "local" : "remote";
-    const target = currentlyLocal ? lib.local : lib.remote;
+    const mode = this.isLocal(libName) ? "local" : "remote";
+    const target = mode === "local" ? lib.local : lib.remote;
 
-    console.log(`🔄 Updating ${libName} in ${mode} mode (${target})...`);
+    console.log(`🔄 Updating ${libName} in ${mode} mode...`);
 
     await new Promise<void>((resolve, reject) => {
       exec(`npm install ${target}`, (error) => {
@@ -117,12 +150,7 @@ export class Libswitch {
       });
     });
 
-    // Refresh internal pkg state
-    this.pkg = JSON.parse(
-      fs.readFileSync(path.join(this.root, "package.json"), "utf-8"),
-    );
-
-    // Ensure tsconfig is still synced correctly
-    this.setTsconfig(lib);
+    this.refreshPkg();
+    this.syncTsconfig();
   }
 }
