@@ -7,7 +7,7 @@ const lib = new Libswitch();
 program
   .name("libswitch")
   .description("Switch between local and remote dependencies")
-  .version("1.0.0");
+  .version("0.1.0");
 
 // STATUS: Names are optional [names...]
 program
